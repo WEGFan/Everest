@@ -98,7 +98,7 @@ namespace Celeste.Mod {
         public static void Log(LogLevel level, string tag, string str) {
             if (shouldLog(tag, level)) {
                 Console.Write("(");
-                Console.Write(DateTime.Now);
+                Console.Write(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
                 Console.Write(") [Everest] [");
                 Console.Write(level.ToString());
                 Console.Write("] [");
