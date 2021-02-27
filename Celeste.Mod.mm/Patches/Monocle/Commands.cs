@@ -27,6 +27,7 @@ namespace Monocle {
         private List<string> sorted;
         private List<string> commandHistory;
         private int seekIndex;
+        private Dictionary<string, patch_CommandInfo> commands;
 
         private int mouseScroll;
         private int cursorScale;
@@ -427,6 +428,15 @@ namespace Monocle {
             }
         }
 
+        [MonoModIgnore]
+        private extern void BuildCommandsList();
+
+        public void ReloadCommandsList() {
+            commands.Clear();
+            sorted.Clear();
+            BuildCommandsList();
+        }
+
         // Only required to be defined so that we can access it.
         [MonoModIgnore]
         private struct patch_Line {
@@ -440,6 +450,13 @@ namespace Monocle {
                 Text = text;
                 Color = color;
             }
+        }
+
+        [MonoModIgnore]
+        private struct patch_CommandInfo {
+            public Action<string[]> Action;
+            public string Help;
+            public string Usage;
         }
 
     }
