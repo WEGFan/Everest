@@ -371,6 +371,8 @@ namespace Celeste.Mod {
             // This also somehow sets the exception message language to English.
             CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
             CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+            Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+            Thread.CurrentThread.CurrentUICulture = CultureInfo.InvariantCulture;
 
             if (!Flags.IsHeadless) {
                 // Initialize the content helper.
