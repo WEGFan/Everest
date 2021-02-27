@@ -26,6 +26,9 @@ namespace Celeste.Mod {
         [MakeEntryPoint]
         private static void Main(string[] args) {
             try {
+                CultureInfo originalCurrentThreadCulture = Thread.CurrentThread.CurrentCulture;
+                CultureInfo originalCurrentThreadUICulture = Thread.CurrentThread.CurrentUICulture;
+
                 // 0.1 parses into 1 in regions using ,
                 // This also somehow sets the exception message language to English.
                 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
@@ -109,6 +112,8 @@ namespace Celeste.Mod {
                     // reset culture setting when starting vanilla
                     CultureInfo.DefaultThreadCurrentCulture = null;
                     CultureInfo.DefaultThreadCurrentUICulture = null;
+                    Thread.CurrentThread.CurrentCulture = originalCurrentThreadCulture;
+                    Thread.CurrentThread.CurrentUICulture = originalCurrentThreadUICulture;
 
                     Console.WriteLine("Loading Vanilla");
                     AppDomain ad = adw.AppDomain;
