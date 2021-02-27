@@ -10,6 +10,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -25,6 +26,13 @@ namespace Celeste.Mod {
         [MakeEntryPoint]
         private static void Main(string[] args) {
             try {
+                // 0.1 parses into 1 in regions using ,
+                // This also somehow sets the exception message language to English.
+                CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+                CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+                Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+                Thread.CurrentThread.CurrentUICulture = CultureInfo.InvariantCulture;
+
                 string everestPath = typeof(Celeste).Assembly.Location;
 
                 try {
@@ -98,6 +106,10 @@ namespace Celeste.Mod {
 
                 StartVanilla:
                 using (AppDomainWrapper adw = new AppDomainWrapper("Celeste", out bool[] status)) {
+                    // reset culture setting when starting vanilla
+                    CultureInfo.DefaultThreadCurrentCulture = null;
+                    CultureInfo.DefaultThreadCurrentUICulture = null;
+
                     Console.WriteLine("Loading Vanilla");
                     AppDomain ad = adw.AppDomain;
 
