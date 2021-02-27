@@ -5,6 +5,7 @@ using MonoMod.Utils;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Threading;
 
 namespace Celeste {
@@ -22,7 +23,9 @@ namespace Celeste {
             Thread thread = new Thread(() => RunThreadWithLogging(method)) {
                 Name = name,
                 IsBackground = true,
-                Priority = highPriority ? ThreadPriority.Highest : ThreadPriority.Normal
+                Priority = highPriority ? ThreadPriority.Highest : ThreadPriority.Normal,
+                CurrentCulture = CultureInfo.InvariantCulture,
+                CurrentUICulture = CultureInfo.InvariantCulture
             };
             lock (threads) {
                 threads.Add(thread);
