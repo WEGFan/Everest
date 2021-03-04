@@ -437,6 +437,39 @@ namespace Monocle {
             BuildCommandsList();
         }
 
+        [MonoModReplace]
+        public new void Log(object obj, Color color) {
+            string text = obj.ToString();
+            if (text.Contains("\n")) {
+                foreach (string obj2 in text.Split('\n')) {
+                    Log(obj2, color);
+                }
+                return;
+            }
+            int width = Engine.Instance.Window.ClientBounds.Width - 40;
+            while (Draw.DefaultFont.MeasureString(text).X > width) {
+                int index = -1;
+                for (int i = 0; i < text.Length; i++) {
+                    if (text[i] == ' ') {
+                        if (Draw.DefaultFont.MeasureString(text.Substring(0, i)).X > width) {
+                            break;
+                        }
+                        index = i;
+                    }
+                }
+                if (index == -1) {
+                    break;
+                }
+                drawCommands.Insert(0, new patch_Line(text.Substring(0, index), color));
+                text = text.Substring(index + 1);
+            }
+            drawCommands.Insert(0, new patch_Line(text, color));
+            int maxCommandLines = Math.Max(CoreModule.Settings.ExtraCommandHistoryLines + (Engine.Instance.Window.ClientBounds.Height - 100) / 30, 0);
+            while (drawCommands.Count > maxCommandLines) {
+                drawCommands.RemoveAt(drawCommands.Count - 1);
+            }
+        }
+
         // Only required to be defined so that we can access it.
         [MonoModIgnore]
         private struct patch_Line {
