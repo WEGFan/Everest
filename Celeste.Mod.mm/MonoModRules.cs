@@ -1,13 +1,11 @@
 ﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
-using MonoMod.Utils;
+using MonoMod.Cil;
 using MonoMod.InlineRT;
+using MonoMod.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using MonoMod.Cil;
 
 namespace MonoMod {
     /// <summary>
@@ -332,6 +330,51 @@ namespace MonoMod {
     [MonoModCustomMethodAttribute("PatchAreaCompleteMusic")]
     class PatchAreaCompleteMusicAttribute : Attribute { };
 
+    /// <summary>
+    /// Patches AreaComplete.VersionNumberAndVariants to offset the version number when necessary.
+    /// </summary>
+    [MonoModCustomMethodAttribute("PatchAreaCompleteVersionNumberAndVariants")]
+    class PatchAreaCompleteVersionNumberAndVariantsAttribute : Attribute { };
+
+    /// <summary>
+    /// Patches {Button,Keyboard}ConfigUI.Update (InputV2) to call a new Reset method instead of the vanilla one.
+    /// </summary>
+    [MonoModCustomMethodAttribute("PatchInputConfigReset")]
+    class PatchInputConfigResetAttribute : Attribute { };
+
+    /// <summary>
+    /// Patches AscendManager.Routine to fix gameplay RNG in custom maps.
+    /// </summary>
+    [MonoModCustomMethodAttribute("PatchAscendManagerRoutine")]
+    class PatchAscendManagerRoutineAttribute : Attribute { }
+
+    /// <summary>
+    /// Patches Commands.UpdateOpen to make key's repeat timer independent with time rate.
+    /// </summary>
+    [MonoModCustomMethodAttribute("PatchCommandsUpdateOpen")]
+    class PatchCommandsUpdateOpenAttribute : Attribute { }
+
+    /// <summary>
+    /// Forcibly changes a given member's name.
+    /// </summary>
+    [MonoModCustomAttribute("ForceName")]
+    class ForceNameAttribute : Attribute {
+        public ForceNameAttribute(string name) {
+        }
+    };
+
+    /// <summary>
+    /// Patches OuiFileSelect.Enter to fix file slots missing bug.
+    /// </summary>
+    [MonoModCustomMethodAttribute("PatchOuiFileSelectEnter")]
+    class PatchOuiFileSelectEnterAttribute : Attribute { }
+
+    /// <summary>
+    /// Patches OuiFileSelect.LoadThread to fix file slots missing bug.
+    /// </summary>
+    [MonoModCustomMethodAttribute("PatchOuiFileSelectLoadThread")]
+    class PatchOuiFileSelectLoadThreadAttribute : Attribute { }
+
     static class MonoModRules {
 
         static bool IsCeleste;
@@ -470,6 +513,15 @@ namespace MonoMod {
             MethodDefinition m_GuiInputController = t_Input.FindMethod("GuiInputController");
             MonoModRule.Flag.Set("V1:GuiInputController", m_GuiInputController.Parameters.Count == 0);
             MonoModRule.Flag.Set("V2:GuiInputController", m_GuiInputController.Parameters.Count == 1);
+
+            MonoModRule.Flag.Set("V1:Input", MonoModRule.Modder.FindType("Celeste.Settings").Resolve().FindField("BtnJump") != null);
+            MonoModRule.Flag.Set("V2:Input", MonoModRule.Modder.FindType("Celeste.Settings").Resolve().FindField("BtnJump") == null);
+
+            MonoModRule.Flag.Set("V1:SubHeader", MonoModRule.Modder.FindType("Celeste.TextMenu/SubHeader").Resolve().FindMethod("System.Void .ctor(System.String)") != null);
+            MonoModRule.Flag.Set("V2:SubHeader", MonoModRule.Modder.FindType("Celeste.TextMenu/SubHeader").Resolve().FindMethod("System.Void .ctor(System.String,System.Boolean)") != null);
+
+            MonoModRule.Flag.Set("V1:TrySquishWiggle", MonoModRule.Modder.FindType("Celeste.Actor").Resolve().FindMethod("System.Boolean TrySquishWiggle(Celeste.CollisionData)") != null);
+            MonoModRule.Flag.Set("V2:TrySquishWiggle", MonoModRule.Modder.FindType("Celeste.Actor").Resolve().FindMethod("System.Boolean TrySquishWiggle(Celeste.CollisionData,System.Int32,System.Int32)") != null);
         }
 
         public static void ProxyFileCalls(MethodDefinition method, CustomAttribute attrib) {
@@ -1317,8 +1369,6 @@ namespace MonoMod {
         }
 
         public static void PatchChapterPanelSwapRoutine(MethodDefinition method, CustomAttribute attrib) {
-            FieldDefinition f_this;
-
             MethodDefinition m_GetCheckpoints = method.DeclaringType.FindMethod("System.Collections.Generic.HashSet`1<System.String> _GetCheckpoints(Celeste.SaveData,Celeste.AreaKey)");
 
             // The gem collection routine is stored in a compiler-generated method.
@@ -1326,7 +1376,6 @@ namespace MonoMod {
                 if (!nest.Name.StartsWith("<SwapRoutine>d__"))
                     continue;
                 method = nest.FindMethod("System.Boolean MoveNext()") ?? method;
-                f_this = method.DeclaringType.FindField("<>4__this");
                 break;
             }
 
@@ -2097,6 +2146,185 @@ namespace MonoMod {
             cursor.Emit(OpCodes.Ldarg_0);
             cursor.Emit(OpCodes.Call, m_playCustomCompleteScreenMusic);
             cursor.Emit(OpCodes.Brtrue_S, breakTarget);
+        }
+
+        public static void PatchAreaCompleteVersionNumberAndVariants(ILContext il, CustomAttribute attrib) {
+            ILCursor c = new ILCursor(il);
+            c.GotoNext(MoveType.After, instr => instr.MatchLdcR4(1020f));
+            c.Emit(OpCodes.Ldsfld, il.Method.DeclaringType.FindField("versionOffset"));
+            c.Emit(OpCodes.Add);
+        }
+
+        public static void PatchInputConfigReset(ILContext il, CustomAttribute attrib) {
+            ILCursor c = new ILCursor(il);
+
+            c.GotoNext(MoveType.AfterLabel, i =>
+                i.MatchCallOrCallvirt("Celeste.Settings", "SetDefaultButtonControls") ||
+                i.MatchCallOrCallvirt("Celeste.Settings", "SetDefaultKeyboardControls")
+            );
+            c.Emit(OpCodes.Pop);
+            c.Emit(OpCodes.Pop);
+            c.Emit(OpCodes.Ldarg_0);
+            c.Next.Operand = il.Method.DeclaringType.FindMethod("System.Void Reset()");
+
+            c.GotoNext(i => i.MatchCall("Celeste.Input", "Initialize"));
+            c.Remove();
+        }
+
+        public static void PatchAscendManagerRoutine(MethodDefinition method, CustomAttribute attrib) {
+            MethodDefinition routine = method;
+
+            // The routine is stored in a compiler-generated method.
+            foreach (TypeDefinition nest in method.DeclaringType.NestedTypes) {
+                if (!nest.Name.StartsWith("<" + method.Name + ">d__")) {
+                    continue;
+                }
+                routine = nest.FindMethod("System.Boolean MoveNext()") ?? method;
+                break;
+            }
+
+            TypeDefinition t_Vector2 = MonoModRule.Modder.FindType("Microsoft.Xna.Framework.Vector2").Resolve();
+
+            MethodDefinition m_ShouldRestorePlayerX = method.DeclaringType.FindMethod("System.Boolean ShouldRestorePlayerX()");
+            MethodDefinition m_Entity_set_X = method.Module.GetType("Monocle.Entity").FindMethod("System.Void set_X(System.Single)").Resolve();
+
+            FieldDefinition f_this = routine.DeclaringType.FindField("<>4__this");
+            FieldDefinition f_player = routine.DeclaringType.Fields.FirstOrDefault(f => f.Name.StartsWith("<player>5__"));
+            FieldDefinition f_from = routine.DeclaringType.Fields.FirstOrDefault(f => f.Name.StartsWith("<from>5__"));
+            FieldReference f_Vector2_X = MonoModRule.Modder.Module.ImportReference(t_Vector2.FindField("X"));
+
+            ILCursor cursor = new ILCursor(new ILContext(routine));
+
+            // move after this.Scene.Add(fader)
+            cursor.GotoNext(MoveType.After,
+                instr => instr.MatchLdarg(0),
+                instr => instr.OpCode == OpCodes.Ldfld && ((FieldReference) instr.Operand).Name.StartsWith("<fader>5__"),
+                instr => instr.OpCode == OpCodes.Callvirt && ((MethodReference) instr.Operand).GetID() == "System.Void Monocle.Scene::Add(Monocle.Entity)");
+
+            // target: from = player.Position;
+            Instruction target = cursor.Next;
+
+            // _ = this.ShouldRestorePlayerX();
+            cursor.Emit(OpCodes.Ldarg_0);
+            cursor.Emit(OpCodes.Ldfld, f_this);
+            cursor.Emit(OpCodes.Call, m_ShouldRestorePlayerX);
+
+            // if (!_) goto target;
+            cursor.Emit(OpCodes.Brfalse, target);
+
+            // player.X = from.X;
+            cursor.Emit(OpCodes.Ldarg_0);
+            cursor.Emit(OpCodes.Ldfld, f_player);
+            cursor.Emit(OpCodes.Ldarg_0);
+            cursor.Emit(OpCodes.Ldflda, f_from);
+            cursor.Emit(OpCodes.Ldfld, f_Vector2_X);
+            cursor.Emit(OpCodes.Callvirt, m_Entity_set_X);
+        }
+
+        public static void PatchCommandsUpdateOpen(ILContext il, CustomAttribute attrib) {
+            ILCursor cursor = new ILCursor(il);
+
+            TypeDefinition t_Engine = MonoModRule.Modder.FindType("Monocle.Engine").Resolve();
+            MethodReference m_get_RawDeltaTime = t_Engine.FindMethod("System.Single get_RawDeltaTime()");
+
+            while (cursor.TryGotoNext(MoveType.Before, instr => instr.MatchCall("Monocle.Engine", "get_DeltaTime"))) {
+                cursor.Next.Operand = m_get_RawDeltaTime;
+            }
+        }
+
+        public static void ForceName(ICustomAttributeProvider cap, CustomAttribute attrib) {
+            if (cap is IMemberDefinition member)
+                member.Name = (string) attrib.ConstructorArguments[0].Value;
+        }
+
+        public static void PatchOuiFileSelectEnter(MethodDefinition method, CustomAttribute attrib) {
+            MethodDefinition routine = method;
+
+            // The routine is stored in a compiler-generated method.
+            string methodName = method.Name;
+            if (methodName.StartsWith("orig_")) {
+                methodName = methodName.Substring(5);
+            }
+            foreach (TypeDefinition nest in method.DeclaringType.NestedTypes) {
+                if (!nest.Name.StartsWith("<" + methodName + ">d__")) {
+                    continue;
+                }
+                routine = nest.FindMethod("System.Boolean MoveNext()") ?? method;
+                break;
+            }
+
+            MethodDefinition m_RemoveSlotsFromScene = method.DeclaringType.FindMethod("System.Void RemoveSlotsFromScene()");
+            MethodDefinition m_AddSlotsToScene = method.DeclaringType.FindMethod("System.Void AddSlotsToScene()");
+
+            FieldDefinition f_this = routine.DeclaringType.FindField("<>4__this");
+
+            ILCursor cursor = new ILCursor(new ILContext(routine));
+
+            cursor.GotoNext(MoveType.After,
+                instr => instr.MatchLdsfld("Celeste.OuiFileSelect", "Loaded"));
+
+            // Steam FNA is weird
+            bool isSteamFNA = cursor.Next.MatchLdcI4(0);
+
+            // remove slots from scene in main thread before RunThread.Start(this.LoadThread, "FILE_LOADING", false)
+            if (isSteamFNA) {
+                cursor.GotoNext(MoveType.Before,
+                    instr => instr.MatchLdarg(0),
+                    instr => instr.OpCode == OpCodes.Ldfld && ((FieldReference) instr.Operand).Name == "<>4__this",
+                    instr => instr.OpCode == OpCodes.Ldftn && ((MethodReference) instr.Operand).GetID() == "System.Void Celeste.OuiFileSelect::LoadThread()");
+            } else {
+                cursor.GotoNext(MoveType.Before,
+                    instr => instr.MatchLdloc(out int _),
+                    instr => instr.OpCode == OpCodes.Ldftn && ((MethodReference) instr.Operand).GetID() == "System.Void Celeste.OuiFileSelect::LoadThread()");
+            }
+
+            cursor.Emit(OpCodes.Ldarg_0);
+            cursor.Emit(OpCodes.Ldfld, f_this);
+            cursor.Emit(OpCodes.Call, m_RemoveSlotsFromScene);
+
+            // add slots to scene in main thread after saves are loaded
+            if (isSteamFNA) {
+                cursor.GotoNext(MoveType.Before,
+                    instr => instr.MatchLdarg(0),
+                    instr => instr.OpCode == OpCodes.Ldfld && ((FieldReference) instr.Operand).Name == "<>4__this",
+                    instr => instr.MatchLdfld("Celeste.OuiFileSelect", "loadedSuccess"));
+            } else {
+                cursor.GotoNext(MoveType.Before,
+                    instr => instr.MatchLdloc(out int _),
+                    instr => instr.MatchLdfld("Celeste.OuiFileSelect", "loadedSuccess"));
+            }
+
+            cursor.Emit(OpCodes.Ldarg_0);
+            cursor.Emit(OpCodes.Ldfld, f_this);
+            cursor.Emit(OpCodes.Call, m_AddSlotsToScene);
+        }
+
+        public static void PatchOuiFileSelectLoadThread(ILContext il, CustomAttribute attrib) {
+            ILCursor cursor = new ILCursor(il);
+
+            // remove removing slots from scene in loading thread
+            cursor.GotoNext(MoveType.AfterLabel,
+                instr => instr.MatchLdarg(0),
+                instr => instr.MatchLdfld("Celeste.OuiFileSelect", "Slots"),
+                instr => instr.MatchLdloc(out int _),
+                instr => instr.MatchLdelemRef());
+
+            int startIndex = cursor.Index;
+
+            ILCursor cursorTemp = cursor.Clone();
+            cursorTemp.GotoNext(MoveType.After,
+                instr => instr.OpCode == OpCodes.Callvirt && ((MethodReference) instr.Operand).GetID() == "System.Void Monocle.Scene::Remove(Monocle.Entity)");
+
+            cursor.RemoveRange(cursorTemp.Index - startIndex);
+
+            // remove adding slots to scene in loading thread
+            cursor.GotoNext(MoveType.AfterLabel,
+                instr => instr.MatchLdarg(0),
+                instr => instr.OpCode == OpCodes.Call && ((MethodReference) instr.Operand).GetID() == "Monocle.Scene Monocle.Entity::get_Scene()",
+                instr => instr.MatchLdloc(out int _),
+                instr => instr.OpCode == OpCodes.Callvirt && ((MethodReference) instr.Operand).GetID() == "System.Void Monocle.Scene::Add(Monocle.Entity)");
+
+            cursor.RemoveRange(4);
         }
 
         public static void PostProcessor(MonoModder modder) {

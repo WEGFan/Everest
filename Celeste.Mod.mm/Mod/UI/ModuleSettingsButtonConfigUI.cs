@@ -1,16 +1,14 @@
-﻿using Celeste.Mod.UI;
-using Microsoft.Xna.Framework.Input;
+﻿using Microsoft.Xna.Framework.Input;
 using Monocle;
+using MonoMod;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using YamlDotNet.Serialization;
 
 namespace Celeste.Mod {
-    public class ModuleSettingsButtonConfigUI : patch_ButtonConfigUI {
+    // This MUST keep its old name. If V1 support gets dropped, rename V2 to this and use MonoModLinkFrom V2 -> this.
+    [Obsolete]
+    public class ModuleSettingsButtonConfigUI : patch_ButtonConfigUI_InputV1 {
 
         public EverestModule Module;
 
@@ -44,7 +42,7 @@ namespace Celeste.Mod {
 
             Clear();
             Add(new Header(Dialog.Clean("BTN_CONFIG_TITLE")));
-            Add(new Info());
+            // Add(new Info()); // V2 replaced this with InputMappingInfo and if you're still using V1 you should feel bad.
 
             Bindings.Clear();
 
@@ -85,12 +83,16 @@ namespace Celeste.Mod {
                 }
             }
 
-            Add(new SubHeader(""));
+            Add(new patch_TextMenu.patch_SubHeader(""));
             Add(new Button(Dialog.Clean("KEY_CONFIG_RESET")) {
                 IncludeWidthInMeasurement = false,
                 AlwaysCenter = true,
                 OnPressed = () => {
-                    Settings.Instance.SetDefaultButtonControls(reset: true);
+                    foreach (ButtonBindingEntry entry in Bindings) {
+                        entry.Binding.Buttons.Clear();
+                        if (entry.Defaults != null && entry.Defaults.Button != 0)
+                            entry.Binding.Buttons.Add(entry.Defaults.Button);
+                    }
                     Input.Initialize();
                     Reload(Selection);
                 }

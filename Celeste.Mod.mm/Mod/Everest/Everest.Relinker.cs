@@ -1,22 +1,19 @@
-﻿using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
+﻿using Celeste.Mod.Core;
+using Celeste.Mod.Helpers;
+using Ionic.Zip;
+using Microsoft.Xna.Framework;
 using Mono.Cecil;
+using Mono.Cecil.Cil;
+using Monocle;
 using MonoMod;
+using MonoMod.Cil;
 using MonoMod.Utils;
-using MonoMod.InlineRT;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.IO;
-using Ionic.Zip;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
-using Celeste.Mod.Helpers;
-using Mono.Cecil.Pdb;
-using Mono.Cecil.Cil;
 
 namespace Celeste.Mod {
     public static partial class Everest {
@@ -66,8 +63,7 @@ namespace Celeste.Mod {
                                 string pathRelinked = Path.Combine(Path.GetDirectoryName(path), nameRelinked);
                                 if (!File.Exists(pathRelinked))
                                     continue;
-                                ModuleDefinition relinked;
-                                if (!StaticRelinkModuleCache.TryGetValue(nameRelinkedNeutral, out relinked)) {
+                                if (!StaticRelinkModuleCache.TryGetValue(nameRelinkedNeutral, out ModuleDefinition relinked)) {
                                     relinked = ModuleDefinition.ReadModule(pathRelinked, new ReaderParameters(ReadingMode.Immediate));
                                     StaticRelinkModuleCache[nameRelinkedNeutral] = relinked;
                                 }
@@ -145,11 +141,89 @@ namespace Celeste.Mod {
                         }
                     };
 
+                    Modder.PostProcessors += ApplyModHackfixes;
+
                     return _Modder;
                 }
                 set {
                     _Modder = value;
                 }
+            }
+
+            private static EverestModuleMetadata _Relinking;
+
+            // The following methods depend on the old fallback-less Atlas behavior via try-catches or otherwise.
+            private static HashSet<string> _ModHackfixNoAtlasFallback = new HashSet<string>() {
+                $"{typeof(void)} Celeste.Mod.AdventureHelper.Entities.LinkedZipMover::.ctor({typeof(Vector2)},{typeof(int)},{typeof(int)},{typeof(Vector2)},{typeof(string)},{typeof(float)},{typeof(string)})",
+                $"{typeof(void)} Celeste.Mod.AdventureHelper.Entities.LinkedZipMover/ZipMoverPathRenderer::.ctor(Celeste.Mod.AdventureHelper.Entities.LinkedZipMover,{typeof(string)})",
+                $"{typeof(void)} Celeste.Mod.AdventureHelper.Entities.LinkedZipMoverNoReturn::.ctor({typeof(Vector2)},{typeof(int)},{typeof(int)},{typeof(Vector2)},{typeof(string)},{typeof(float)},{typeof(string)})",
+                $"{typeof(void)} Celeste.Mod.AdventureHelper.Entities.LinkedZipMoverNoReturn/ZipMoverPathRenderer::.ctor(Celeste.Mod.AdventureHelper.Entities.LinkedZipMoverNoReturn,{typeof(string)})",
+                $"{typeof(void)} Celeste.Mod.AdventureHelper.Entities.ZipMoverNoReturn::.ctor({typeof(Vector2)},{typeof(int)},{typeof(int)},{typeof(Vector2)},{typeof(float)},{typeof(string)})",
+                $"{typeof(void)} Celeste.Mod.AdventureHelper.Entities.ZipMoverNoReturn/ZipMoverPathRenderer::.ctor(Celeste.Mod.AdventureHelper.Entities.ZipMoverNoReturn,{typeof(string)})",
+            };
+
+            private static void ApplyModHackfixes(MonoModder modder) {
+                // See Coroutine.ForceDelayedSwap for more info.
+                // Older mods are built with this delay in mind, except for hooks.
+                MethodInfo coroutineWrapper =
+                    (_Relinking?.Dependencies?.Find(dep => dep.Name == CoreModule.Instance.Metadata.Name)
+                    ?.Version ?? new Version(0, 0, 0, 0)) < new Version(1, 2563, 0) ?
+                    typeof(CoroutineDelayHackfixHelper).GetMethod("Wrap") : null;
+
+                if (coroutineWrapper == null && _Relinking == null && !(
+                        // Some mods require additional special care.
+                        _Relinking.Name == "AdventureHelper" // Don't check the version for this mod as the hackfix is harmless.
+                    ))
+                    return; // No hackfixes necessary.
+
+                void CrawlMethod(MethodDefinition method) {
+                    string methodID = method.GetID();
+
+                    if (coroutineWrapper != null && method.HasBody && method.ReturnType.FullName == "System.Collections.IEnumerator") {
+                        using (ILContext ctx = new ILContext(method)) {
+                            ctx.Invoke(ctx => {
+                                ILCursor c = new ILCursor(ctx);
+                                while (c.TryGotoNext(i => i.MatchRet())) {
+                                    c.Next.OpCode = OpCodes.Ldstr;
+                                    c.Next.Operand = methodID;
+                                    c.Index++;
+                                    c.Emit(OpCodes.Call, coroutineWrapper);
+                                    c.Emit(OpCodes.Ret);
+                                }
+                            });
+                        }
+                    }
+
+                    if (_ModHackfixNoAtlasFallback.Contains(methodID)) {
+                        using (ILContext ctx = new ILContext(method)) {
+                            ctx.Invoke(ctx => {
+                                ILCursor c = new ILCursor(ctx);
+
+                                c.Emit(OpCodes.Ldsfld, typeof(GFX).GetField("Game"));
+                                c.Emit(OpCodes.Ldnull);
+                                c.Emit(OpCodes.Callvirt, typeof(patch_Atlas).GetMethod("PushFallback"));
+
+                                while (c.TryGotoNext(MoveType.AfterLabel, i => i.MatchRet())) {
+                                    c.Emit(OpCodes.Ldsfld, typeof(GFX).GetField("Game"));
+                                    c.Emit(OpCodes.Callvirt, typeof(patch_Atlas).GetMethod("PopFallback"));
+                                    c.Emit(OpCodes.Pop);
+                                    c.Index++;
+                                }
+                            });
+                        }
+                    }
+                }
+
+                void CrawlType(TypeDefinition type) {
+                    foreach (MethodDefinition method in type.Methods)
+                        CrawlMethod(method);
+
+                    foreach (TypeDefinition nested in type.NestedTypes)
+                        CrawlType(nested);
+                }
+
+                foreach (TypeDefinition type in modder.Module.Types)
+                    CrawlType(type);
             }
 
             private static AssemblyDefinition OnRelinkerResolveFailure(object sender, AssemblyNameReference reference) {
@@ -169,7 +243,6 @@ namespace Celeste.Mod {
                 return null;
             }
 
-            [Obsolete("Use the variant with an explicit assembly name instead.")]
             /// <summary>
             /// Relink a .dll to point towards Celeste.exe and FNA / XNA properly at runtime, then load it.
             /// </summary>
@@ -179,6 +252,7 @@ namespace Celeste.Mod {
             /// <param name="checksumsExtra">Any optional checksums</param>
             /// <param name="prePatch">An optional step executed before patching, but after MonoMod has loaded the input assembly.</param>
             /// <returns>The loaded, relinked assembly.</returns>
+            [Obsolete("Use the variant with an explicit assembly name instead.")]
             public static Assembly GetRelinkedAssembly(EverestModuleMetadata meta, Stream stream,
                 MissingDependencyResolver depResolver = null, string[] checksumsExtra = null, Action<MonoModder> prePatch = null)
                 => GetRelinkedAssembly(meta, Path.GetFileNameWithoutExtension(meta.DLL), stream, depResolver, checksumsExtra, prePatch);
@@ -187,6 +261,7 @@ namespace Celeste.Mod {
             /// Relink a .dll to point towards Celeste.exe and FNA / XNA properly at runtime, then load it.
             /// </summary>
             /// <param name="meta">The mod metadata, used for caching, among other things.</param>
+            /// <param name="asmname"></param>
             /// <param name="stream">The stream to read the .dll from.</param>
             /// <param name="depResolver">An optional dependency resolver.</param>
             /// <param name="checksumsExtra">Any optional checksums</param>
@@ -242,6 +317,8 @@ namespace Celeste.Mod {
                 bool temporaryASM = false;
 
                 try {
+                    _Relinking = meta;
+
                     MonoModder modder = Modder;
 
                     modder.Input = stream;
@@ -250,8 +327,7 @@ namespace Celeste.Mod {
 
                     ((DefaultAssemblyResolver) modder.AssemblyResolver).ResolveFailure += resolver;
 
-                    string symbolPath;
-                    modder.ReaderParameters.SymbolStream = OpenStream(meta, out symbolPath, meta.DLL.Substring(0, meta.DLL.Length - 4) + ".pdb", meta.DLL + ".mdb");
+                    modder.ReaderParameters.SymbolStream = OpenStream(meta, out string symbolPath, meta.DLL.Substring(0, meta.DLL.Length - 4) + ".pdb", meta.DLL + ".mdb");
                     modder.ReaderParameters.ReadSymbols = modder.ReaderParameters.SymbolStream != null;
                     if (modder.ReaderParameters.SymbolReaderProvider != null &&
                         modder.ReaderParameters.SymbolReaderProvider is RelinkerSymbolReaderProvider) {
@@ -438,12 +514,12 @@ namespace Celeste.Mod {
                 return null;
             }
 
-            [Obsolete("Use the variant with an explicit assembly name instead.")]
             /// <summary>
             /// Get the cached path of a given mod's relinked .dll
             /// </summary>
             /// <param name="meta">The mod metadata.</param>
             /// <returns>The full path to the cached relinked .dll</returns>
+            [Obsolete("Use the variant with an explicit assembly name instead.")]
             public static string GetCachedPath(EverestModuleMetadata meta)
                 => GetCachedPath(meta, Path.GetFileNameWithoutExtension(meta.DLL));
 
@@ -451,6 +527,7 @@ namespace Celeste.Mod {
             /// Get the cached path of a given mod's relinked .dll
             /// </summary>
             /// <param name="meta">The mod metadata.</param>
+            /// <param name="asmname"></param>
             /// <returns>The full path to the cached relinked .dll</returns>
             public static string GetCachedPath(EverestModuleMetadata meta, string asmname)
                 => Path.Combine(Loader.PathCache, meta.Name + "." + asmname + ".dll");
