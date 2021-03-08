@@ -593,7 +593,7 @@ namespace MonoMod {
 
                 if (instri > 2 &&
                     instrs[instri - 3].MatchLdfld("Celeste.ModeProperties", "StrawberriesByCheckpoint") &&
-                    instr.MatchCallvirt("Celeste.EntityData[0...,0...]", "Get(System.Int32,System.Int32)")
+                    instr.MatchCallvirt("Celeste.EntityData[0...,0...]", "Get")
                 ) {
                     instrs[instri - 3].OpCode = OpCodes.Ldflda;
                     instr.OpCode = OpCodes.Call;
@@ -728,7 +728,7 @@ namespace MonoMod {
                         instr.MatchLdfld("Celeste.EntityData", "Name") &&
                         instrs[instri + 1].MatchStloc(out int _) &&
                         instrs[instri + 2].MatchLdloc(out int _) &&
-                        instrs[instri + 3].MatchCall("<PrivateImplementationDetails>", "ComputeStringHash(System.String)")
+                        instrs[instri + 3].MatchCall("<PrivateImplementationDetails>", "ComputeStringHash")
                     ) {
                     // Insert a call to our own entity handler here.
                     // If it returns true, replace the name with ""
@@ -1636,7 +1636,7 @@ namespace MonoMod {
 
             Mono.Collections.Generic.Collection<Instruction> instrs = method.Body.Instructions;
             for (int instri = 0; instri < instrs.Count; instri++) {
-                if (instrs[instri].MatchCall("system.IO.Directory", "GetFiles")) {
+                if (instrs[instri].MatchCall("System.IO.Directory", "GetFiles")) {
                     instrs[instri].Operand = m_GetFiles;
                 }
             }
@@ -1891,7 +1891,7 @@ namespace MonoMod {
             if (isSteamFNA) {
                 cursor.Emit(OpCodes.Ldloc_S, (byte) 4);
                 cursor.Emit(OpCodes.Callvirt, m_Component_get_Entity);
-                cursor.Emit(OpCodes.Stloc_S, (byte) 4);
+                cursor.Emit(OpCodes.Stloc_S, (byte) 5);
             } else {
                 cursor.Emit(OpCodes.Ldloc_2);
                 cursor.Emit(OpCodes.Callvirt, m_Component_get_Entity);
