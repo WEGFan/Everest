@@ -12,6 +12,11 @@
   <PropertyGroup>
     <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
   </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <Optimize>true</Optimize>
+    <DebugType>full</DebugType>
+  </PropertyGroup>
   
   <ItemGroup>
     <Reference Include="System.Management" />
