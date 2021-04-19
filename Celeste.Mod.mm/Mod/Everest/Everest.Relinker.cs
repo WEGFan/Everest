@@ -163,14 +163,7 @@ namespace Celeste.Mod {
             };
 
             private static void ApplyModHackfixes(MonoModder modder) {
-                // See Coroutine.ForceDelayedSwap for more info.
-                // Older mods are built with this delay in mind, except for hooks.
-                MethodInfo coroutineWrapper =
-                    (_Relinking?.Dependencies?.Find(dep => dep.Name == CoreModule.Instance.Metadata.Name)
-                    ?.Version ?? new Version(0, 0, 0, 0)) < new Version(1, 2563, 0) ?
-                    typeof(CoroutineDelayHackfixHelper).GetMethod("Wrap") : null;
-
-                if (coroutineWrapper == null && _Relinking == null && !(
+                if (_Relinking == null && !(
                         // Some mods require additional special care.
                         _Relinking.Name == "AdventureHelper" // Don't check the version for this mod as the hackfix is harmless.
                     ))
@@ -178,21 +171,6 @@ namespace Celeste.Mod {
 
                 void CrawlMethod(MethodDefinition method) {
                     string methodID = method.GetID();
-
-                    if (coroutineWrapper != null && method.HasBody && method.ReturnType.FullName == "System.Collections.IEnumerator") {
-                        using (ILContext ctx = new ILContext(method)) {
-                            ctx.Invoke(ctx => {
-                                ILCursor c = new ILCursor(ctx);
-                                while (c.TryGotoNext(i => i.MatchRet())) {
-                                    c.Next.OpCode = OpCodes.Ldstr;
-                                    c.Next.Operand = methodID;
-                                    c.Index++;
-                                    c.Emit(OpCodes.Call, coroutineWrapper);
-                                    c.Emit(OpCodes.Ret);
-                                }
-                            });
-                        }
-                    }
 
                     if (_ModHackfixNoAtlasFallback.Contains(methodID)) {
                         using (ILContext ctx = new ILContext(method)) {
