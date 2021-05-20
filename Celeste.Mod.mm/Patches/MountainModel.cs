@@ -63,6 +63,10 @@ namespace Celeste {
         private float fogFade = 1f;
         private bool firstUpdate = true;
 
+        private int targetState;
+
+        public int TargetState => targetState;
+
         public extern void orig_ctor();
         [MonoModConstructor]
         public void ctor() {
@@ -81,9 +85,41 @@ namespace Celeste {
             customStarstream2 = starstream2;
         }
 
-        public extern void orig_Update();
+        public void _orig_Update() {
+            if (currState != nextState) {
+                easeState = Calc.Approach(easeState, 1f, (nextState == targetState ? 1 : 4) * Engine.DeltaTime);
+                if (easeState >= 1f) {
+                    currState = nextState;
+                }
+            } else if (nextState != targetState) {
+                nextState = targetState;
+                easeState = 0f;
+            }
+            StarEase = Calc.Approach(StarEase, nextState == 3 ? 1f : 0f, (nextState == 3 ? 1.5f : 1f) * Engine.DeltaTime);
+            SnowForceFloat = Calc.ClampedMap(StarEase, 0.95f, 1f, 0f, 1f);
+            ignoreCameraRotation = (nextState == 3 && currState != 3 && StarEase < 0.5f) || (nextState != 3 && currState == 3 && StarEase > 0.5f);
+            if (nextState == 3) {
+                SnowStretch = Calc.ClampedMap(StarEase, 0f, 0.25f, 0f, 1f) * 50f;
+                SnowSpeedAddition = SnowStretch * 4f;
+            } else {
+                SnowStretch = Calc.ClampedMap(StarEase, 0.25f, 1f, 0f, 1f) * 50f;
+                SnowSpeedAddition = -SnowStretch * 4f;
+            }
+
+            // modified
+            starfog.Rotate(-1 * Engine.DeltaTime / patch_MountainRenderer.RotateDuration);
+            fog.Rotate(-1 * Engine.DeltaTime / patch_MountainRenderer.RotateDuration);
+            fog.TopColor = fog.BotColor = Color.Lerp(mountainStates[currState].FogColor, mountainStates[nextState].FogColor, easeState);
+            fog2.Rotate(-1 * Engine.DeltaTime / patch_MountainRenderer.RotateDuration);
+            fog2.TopColor = fog2.BotColor = Color.White * 0.3f * NearFogAlpha;
+            starstream1.Rotate(1 * Engine.DeltaTime / patch_MountainRenderer.RotateDuration);
+            starstream2.Rotate(2 * Engine.DeltaTime / patch_MountainRenderer.RotateDuration);
+            birdTimer = (Engine.FrameCounter * 10) * ((float)Math.PI * 2f) * Engine.DeltaTime / (patch_MountainRenderer.RotateDuration / 3);
+        }
+
+        [MonoModReplace]
         public new void Update() {
-            orig_Update();
+            _orig_Update();
 
             string path;
             try {
@@ -116,12 +152,12 @@ namespace Celeste {
                     }
 
                     // refresh custom mountain objets (rotate the fog, etc)
-                    customFog.Rotate((0f - Engine.DeltaTime) * 0.01f);
-                    customFog2.Rotate((0f - Engine.DeltaTime) * 0.01f);
+                    customFog.Rotate(-1 * Engine.DeltaTime / patch_MountainRenderer.RotateDuration);
+                    customFog2.Rotate(-1 * Engine.DeltaTime / patch_MountainRenderer.RotateDuration);
                     customFog2.TopColor = (customFog2.BotColor = Color.White * 0.3f * NearFogAlpha);
-                    customStarstream1.Rotate(Engine.DeltaTime * 0.01f);
-                    customStarstream2.Rotate(Engine.DeltaTime * 0.02f);
-                    customStarfog.Rotate(-Engine.DeltaTime * 0.01f);
+                    customStarstream1.Rotate(1 * Engine.DeltaTime / patch_MountainRenderer.RotateDuration);
+                    customStarstream2.Rotate(2 * Engine.DeltaTime / patch_MountainRenderer.RotateDuration);
+                    customStarfog.Rotate(-1 * Engine.DeltaTime / patch_MountainRenderer.RotateDuration);
                 }
             }
 
@@ -321,9 +357,9 @@ namespace Celeste {
                     GaussianBlur.Blur((RenderTarget2D) buffer, blurA, blurB, 0.75f, clear: true, samples: GaussianBlur.Samples.Five);
 
                     // render the fade to black.
-                    Draw.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp, null, null);
-                    Draw.Rect(-10f, -10f, 1940f, 1100f, Color.Black * fade);
-                    Draw.SpriteBatch.End();
+                    // Draw.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp, null, null);
+                    // Draw.Rect(-10f, -10f, 1940f, 1100f, Color.Black * fade);
+                    // Draw.SpriteBatch.End();
 
                     // Initialize new custom fog and star belt when we switch between maps
                     if (!(SIDToUse).Equals(PreviousSID)) {
@@ -378,9 +414,9 @@ namespace Celeste {
             orig_BeforeRender(scene);
 
             // render the fade to black.
-            Draw.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp, null, null);
-            Draw.Rect(-10f, -10f, 1940f, 1100f, Color.Black * fade);
-            Draw.SpriteBatch.End();
+            // Draw.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp, null, null);
+            // Draw.Rect(-10f, -10f, 1940f, 1100f, Color.Black * fade);
+            // Draw.SpriteBatch.End();
 
             PreviousSID = SIDToUse;
         }

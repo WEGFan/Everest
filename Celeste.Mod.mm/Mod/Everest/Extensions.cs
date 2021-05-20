@@ -416,5 +416,41 @@ namespace Celeste.Mod {
             return false;
         }
 
+        public static string ToFixedString(this Quaternion quaternion) {
+            return $"{{ X:{quaternion.X:F3} Y:{quaternion.Y:F3} Z:{quaternion.Z:F3} W:{quaternion.W:F3} }}";
+        }
+        public static string ToFixedString(this Vector2 vector2) {
+            return $"{{ X:{vector2.X:F3} Y:{vector2.Y:F3} }}";
+        }
+        public static string ToFixedString(this Vector3 vector3) {
+            return $"{{ X:{vector3.X:F3} Y:{vector3.Y:F3} Z:{vector3.Z:F3} }}";
+        }
+
+        private static Vector3 AngleTo(Vector3 from, Vector3 location) {
+            Vector3 result = default;
+            Vector3 vector = Vector3.Normalize(location - from);
+            result.X = (float)Math.Asin(vector.Y);
+            result.Y = (float)Math.Atan2(0.0 - vector.X, 0.0 - vector.Z);
+            return result;
+        }
+
+        public static Vector3 EulerAngle(this Quaternion rotation) {
+            Vector3 result = default;
+            Vector3 location = Vector3.Transform(Vector3.Forward, rotation);
+            Vector3 position = Vector3.Transform(Vector3.Up, rotation);
+            result = AngleTo(default, location);
+            if (result.X == (float) Math.PI / 2f) {
+                result.Y = (float) Math.Atan2(position.X, position.Z);
+                result.Z = 0f;
+            } else if (result.X == -(float) Math.PI / 2f) {
+                result.Y = (float) Math.Atan2(0.0 - position.X, 0.0 - position.Z);
+                result.Z = 0f;
+            } else {
+                position = Vector3.Transform(position, Matrix.CreateRotationY(0f - result.Y));
+                position = Vector3.Transform(position, Matrix.CreateRotationX(0f - result.X));
+                result.Z = (float) Math.Atan2(0.0 - position.Z, position.Y);
+            }
+            return result;
+        }
     }
 }

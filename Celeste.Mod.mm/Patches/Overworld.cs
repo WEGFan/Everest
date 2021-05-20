@@ -14,6 +14,8 @@ namespace Celeste {
         private Snow3D Snow3D;
 #pragma warning restore CS0649
 
+        public Snow3D GetSnow3D => Snow3D;
+
         public patch_Overworld(OverworldLoader loader)
             : base(loader) {
             // no-op. MonoMod ignores this - we only need this to make the compiler shut up.
