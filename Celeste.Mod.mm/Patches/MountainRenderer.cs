@@ -72,9 +72,9 @@ namespace Celeste {
             if (!inFreeCameraDebugMode) {
                 if (rotateAroundCenter) {
                     // modified
-                    rotateTimer = (0f - (float)Math.Max(0L, patch_Snow3D.FrameCount)) * ((float)Math.PI * 2f) / RotateDuration * Engine.DeltaTime;
+                    rotateTimer = (float)(2f * Math.PI * (-Math.Max(0L, patch_Snow3D.FrameCount) / (RotateDuration / Engine.DeltaTime)));
 
-                    Vector3 value2 = new Vector3((float)Math.Cos((double)rotateTimer) * 15f, 3f, (float)Math.Sin((double)rotateTimer) * 15f);
+                    Vector3 value2 = new Vector3((float)Math.Cos(rotateTimer + Math.PI / 2) * 15f, 3f, (float)Math.Sin(rotateTimer + Math.PI / 2) * 15f);
                     MountainModel model = Model;
                     // modified
                     model.Camera.Position = value2;
@@ -106,9 +106,9 @@ namespace Celeste {
                         }
                     } else if (rotateAroundTarget) {
                         // modified
-                        rotateTimer = (0f - (float)Math.Max(0L, patch_Snow3D.FrameCount)) * ((float)Math.PI * 2f) / RotateDuration * Engine.DeltaTime;
+                        rotateTimer = (float)(2f * Math.PI * (-Math.Max(0L, patch_Snow3D.FrameCount) / (RotateDuration / Engine.DeltaTime)));
                         float num2 = (new Vector2(easeCameraTo.Target.X, easeCameraTo.Target.Z) - new Vector2(easeCameraTo.Position.X, easeCameraTo.Position.Z)).Length();
-                        Vector3 value3 = new Vector3(easeCameraTo.Target.X + (float)Math.Cos((double)rotateTimer) * num2, easeCameraTo.Position.Y, easeCameraTo.Target.Z + (float)Math.Sin((double)rotateTimer) * num2);
+                        Vector3 value3 = new Vector3(easeCameraTo.Target.X + (float)Math.Cos(rotateTimer + Math.PI / 2) * num2, easeCameraTo.Position.Y, easeCameraTo.Target.Z + (float)Math.Sin(rotateTimer + Math.PI / 2) * num2);
                         MountainModel model2 = Model;
                         // modified
                         model2.Camera.Position = value3;
@@ -255,19 +255,16 @@ namespace Celeste {
                 return;
             }
             Draw.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.NonPremultiplied, SamplerState.LinearClamp, null, null, null, Engine.ScreenMatrix);
-            string text = string.Concat(new object[] {
-                $"{timer:F3} {Engine.DeltaTime}\n",
-                $"Camera rotation: {Model.Camera.Rotation.ToFixedString()}\n",
-                $"Camera rotation angle: {Model.Camera.Rotation.EulerAngle().ToFixedString()}\n",
-                $"{Engine.FrameCounter} {patch_Snow3D.FrameCount}"
-            });
+            string text = $"{timer:F3} {Engine.FrameCounter} {patch_Snow3D.FrameCount}\n" +
+                $"Camera pos: {Model.Camera.Position.ToFixedString()}, rotation: {Model.Camera.Rotation.ToFixedString()}\n" +
+                $"rotation angle: {Model.Camera.Rotation.EulerAngle().ToFixedString()}, rotateTimer: {rotateTimer:F3}";
             ActiveFont.DrawOutline(text, new Vector2(8f, 8f), Vector2.Zero, Vector2.One * 0.5f, Color.White, 2f, Color.Black);
             List<string> particleStatusText = ((Engine.Scene as patch_Overworld).GetSnow3D as patch_Snow3D).Particles
                 .Select((particle, index) => $"[{index}] {(particle as patch_Snow3D.patch_Particle).StatusString}")
                 .Take(particleDebugStringCount)
                 .ToList();
             for (int i = 0; i < particleStatusText.Count; i++) {
-                Vector2 position = new Vector2(8f, 4 * ActiveFont.LineHeight * 0.5f + 8f + i * 2 * ActiveFont.LineHeight * 0.5f);
+                Vector2 position = new Vector2(8f, 3 * ActiveFont.LineHeight * 0.5f + 8f + i * 2 * ActiveFont.LineHeight * 0.5f);
                 ActiveFont.DrawOutline(particleStatusText[i], position, Vector2.Zero, Vector2.One * 0.5f, Color.White, 2f, Color.Black);
             }
             Draw.SpriteBatch.End();

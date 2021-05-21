@@ -52,7 +52,7 @@ namespace Celeste {
                 particles.Add(particle);
                 Add(particle);
             }
-            FrameCount = -600;
+            FrameCount = -900;
         }
 
         public extern void orig_Update();
