@@ -381,7 +381,7 @@ namespace MonoMod {
     [MonoModCustomMethodAttribute("PatchOuiFileSelectLoadThread")]
     class PatchOuiFileSelectLoadThreadAttribute : Attribute { }
 
-    static class MonoModRules {
+    static partial class MonoModRules {
 
         static bool IsCeleste;
 
