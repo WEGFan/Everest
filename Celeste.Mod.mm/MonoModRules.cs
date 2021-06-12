@@ -5,6 +5,7 @@ using MonoMod.InlineRT;
 using MonoMod.Utils;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace MonoMod {
@@ -381,7 +382,13 @@ namespace MonoMod {
     [MonoModCustomMethodAttribute("PatchOuiFileSelectLoadThread")]
     class PatchOuiFileSelectLoadThreadAttribute : Attribute { }
 
-    static class MonoModRules {
+    /// <summary>
+    /// Patches UserIO.Save to flush save data to disk after writing it.
+    /// </summary>
+    [MonoModCustomMethodAttribute("PatchSaveDataFlushSaves")]
+    class PatchSaveDataFlushSavesAttribute : Attribute { }
+
+    static partial class MonoModRules {
 
         static bool IsCeleste;
 
@@ -3033,6 +3040,27 @@ namespace MonoMod {
                 c.Emit(OpCodes.Ldfld, il.Method.DeclaringType.FindField("Existed"));
                 c.Emit(OpCodes.Brtrue, jumpTarget);
             }
+        }
+
+        public static void PatchSaveDataFlushSaves(ILContext il, CustomAttribute attrib) {
+            ILCursor c = new ILCursor(il);
+
+            c.GotoNext(instr => instr.MatchCallvirt<Stream>("Write"));
+            c.Next.OpCode = OpCodes.Call;
+            c.Next.Operand = il.Method.DeclaringType.FindMethod("_saveAndFlush");
+
+            // File.Copy(from, to, overwrite: true) => _saveAndFlushToFile(data, to)
+            c.GotoNext(instr => instr.MatchCall(typeof(File), "Copy"));
+            c.Index -= 3;
+
+            // replace "from" with "data"
+            c.Next.OpCode = OpCodes.Ldarg_1;
+            // skip to "overwrite: true" and remove it
+            c.Index += 2;
+            c.Remove();
+            // replace Files.Copy with _saveAndFlushToFile
+            c.Next.OpCode = OpCodes.Call;
+            c.Next.Operand = il.Method.DeclaringType.FindMethod("_saveAndFlushToFile");
         }
 
         public static void PostProcessor(MonoModder modder) {

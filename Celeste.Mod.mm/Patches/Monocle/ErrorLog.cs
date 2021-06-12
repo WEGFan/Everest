@@ -19,5 +19,10 @@ namespace Monocle {
         [PatchErrorLogWrite] // ... except for manually manipulating the method via MonoModRules
         public static extern void Write(string str);
 
+        [MonoModIgnore]
+        [MonoModIfFlag("FNA")]
+        [PatchErrorLogGetLogPath]
+        private static extern string GetLogPath();
+
     }
 }
