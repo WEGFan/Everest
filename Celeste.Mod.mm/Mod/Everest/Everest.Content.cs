@@ -367,9 +367,42 @@ namespace Celeste.Mod {
         /// </summary>
         public readonly ZipFile Zip;
 
+        private Dictionary<object, ZipFile> ContextZips = new Dictionary<object, ZipFile>();
+        private Dictionary<object, int> ContextZipOpens = new Dictionary<object, int>();
+
         public ZipModContent(string path) {
             Path = path;
-            Zip = new ZipFile(path);
+            Zip = OpenZip();
+        }
+
+        public ZipFile OpenZip() => new ZipFile(Path);
+
+        public ZipFile OpenContextZip(object h) {
+            if (h == null)
+                h = Thread.CurrentThread;
+            lock (ContextZips) {
+                if (!ContextZips.TryGetValue(h, out ZipFile zip) || zip == null) {
+                    zip = new ZipFile(Path);
+                    ContextZips[h] = zip;
+                    ContextZipOpens[h] = 1;
+                } else {
+                    ContextZipOpens[h]++;
+                }
+                return zip;
+            }
+        }
+
+        public void CloseContextZip(object h) {
+            if (h == null)
+                h = Thread.CurrentThread;
+            lock (ContextZips) {
+                if (ContextZips.TryGetValue(h, out ZipFile zip) && zip != null && --ContextZipOpens[h] <= 0) {
+                    QueuedTaskHelper.Do(zip, 4, () => {
+                        zip?.Dispose();
+                        ContextZips[h] = null;
+                    });
+                }
+            }
         }
 
         protected override void Crawl() {
@@ -384,6 +417,8 @@ namespace Celeste.Mod {
         protected override void Dispose(bool disposing) {
             base.Dispose(disposing);
             Zip.Dispose();
+            foreach (ZipFile zip in ContextZips.Values)
+                zip?.Dispose();
         }
     }
 
