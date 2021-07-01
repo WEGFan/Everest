@@ -4,18 +4,13 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Celeste.Mod.Helpers {
-    public sealed class FileProxyStream : FileStream {
+    public sealed class UndisposableStream : Stream {
 
         // I'm overcomplicating this. -ade
 
-        private readonly static string Dummy = Path.GetTempFileName();
-
         public readonly Stream Inner;
 
-        public FileProxyStream(Stream inner)
-            // We need to open something.
-            : base(Dummy, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete) {
-            base.Close();
+        public UndisposableStream(Stream inner) {
             Inner = inner;
         }
 
@@ -109,15 +104,10 @@ namespace Celeste.Mod.Helpers {
             return Inner.FlushAsync(cancellationToken);
         }
 
-        protected override void Dispose(bool disposing) {
-            // This gets called when closing the dummy.
-            if (Inner == null) {
-                base.Dispose(disposing);
-                return;
-            }
+        public override void Close() {
+        }
 
-            // This gets called when closing the stream proper.
-            Inner.Dispose();
+        protected override void Dispose(bool disposing) {
         }
 
     }

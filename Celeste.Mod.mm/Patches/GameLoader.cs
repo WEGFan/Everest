@@ -78,6 +78,7 @@ namespace Celeste {
         [MonoModReplace]
         private void LoadThread() {
             MInput.Disabled = true;
+            MainThreadHelper.Boost = 25;
             Stopwatch timer = Stopwatch.StartNew();
 
             Audio.Init();
@@ -87,13 +88,10 @@ namespace Celeste {
             Console.WriteLine(" - AUDIO LOAD: " + timer.ElapsedMilliseconds + "ms");
             timer.Stop();
 
-            if (!CoreModule.Settings.NonThreadedGL) {
-                GFX.Load();
-                MTN.Load();
-                GFX.LoadData();
-                MTN.LoadData();
-            }
-            // Otherwise loaded in CoreModule.LoadContent
+            GFX.Load();
+            MTN.Load();
+            GFX.LoadData();
+            MTN.LoadData();
 
             timer = Stopwatch.StartNew();
             Fonts.Prepare();
@@ -108,6 +106,13 @@ namespace Celeste {
             timer = Stopwatch.StartNew();
             AreaData.Load();
             Console.WriteLine(" - LEVELS LOAD: " + timer.ElapsedMilliseconds + "ms");
+            timer.Stop();
+
+            timer = Stopwatch.StartNew();
+            MainThreadHelper.Boost = 50;
+            MainThreadHelper.Get(() => MainThreadHelper.Boost = 0).GetResult();
+            // FIXME: There could be ongoing tasks which add to the main thread queue right here.
+            Console.WriteLine(" - MAIN THREAD QUEUE REMAINDER LOAD: " + timer.ElapsedMilliseconds + "ms");
             timer.Stop();
 
             Console.WriteLine("DONE LOADING (in " + Celeste.LoadTimer.ElapsedMilliseconds + "ms)");

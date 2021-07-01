@@ -156,7 +156,17 @@ namespace Celeste.Mod.Core {
         [SettingNeedsRelaunch]
         [SettingInGame(false)]
         [SettingIgnore] // TODO: Show as advanced setting.
-        public bool NonThreadedGL { get; set; } = false;
+        public bool? ThreadedGL { get; set; } = null;
+
+        [SettingNeedsRelaunch]
+        [SettingInGame(false)]
+        [SettingIgnore] // TODO: Show as advanced setting.
+        public bool? FastTextureLoading { get; set; } = null;
+
+        [SettingNeedsRelaunch]
+        [SettingInGame(false)]
+        [SettingIgnore] // TODO: Show as advanced setting.
+        public float FastTextureLoadingMaxMB { get; set; } = 0;
 
         [SettingNeedsRelaunch]
         [SettingInGame(false)]
@@ -190,6 +200,10 @@ namespace Celeste.Mod.Core {
         [SettingInGame(false)]
         [SettingIgnore] // TODO: Show as advanced setting.
         public int ExtraCommandHistoryLines { get; set; } = 50;
+
+        [SettingInGame(false)]
+        [SettingIgnore] // TODO: Show as advanced setting.
+        public bool? SaveDataFlush { get; set; } = null;
 
         public string InputGui { get; set; } = "";
 
